@@ -42,6 +42,7 @@ class Filter():
 		self.diff = rospy.get_param('auto_docking/differential_drive')
 		self.p_gain = rospy.get_param('auto_docking/kp/x')
 		self.max_vel_limit = rospy.get_param('auto_docking/max_vel_limit')
+		self.undock_flag = 0
 		# WARNING: PLEASE DO NOT CHANGE THE BELOW VALUE (docking_pose) WITHOUT THE CONSULTATION FROM NEOBOTIX. 
 		self.undocking_pose = rospy.get_param('auto_docking/undocking_pose') # Safety is 50 cm for the robot to turn and do other actions
 		self.marker_list = []
@@ -75,6 +76,9 @@ class Filter():
 				rospy.loginfo(str(l)+" marker(s) loaded:"+str(self.defined_markers))
 		except:
 			rospy.loginfo("No marker is defined.")
+
+	def get_undock_val(self,):
+		return self.base_in_map_translation[0]
 
 	# establish the rotation matrix from euler angle
 	def mat_from_euler(self, euler):
@@ -286,16 +290,20 @@ class Filter():
 		# callback function of service /auto_docking
 	def service_undocking_callback(self, auto_docking):
 		docking_state = rospy.get_param('undocking')
+		undock_pose = 0
 		if(not docking_state):
+			if(self.undock_flag == 0):
+				undock_pose = self.get_undock_val()
+				self.undock_flag = self.undock_flag+1
 			if(not auto_docking.station_nr in self.marker_list):
 				return "Marker "+str(auto_docking.station_nr)+" not detected, please make sure robot is in a feasible area."
 			else:
 				rospy.set_param('undocking', True)
 				rospy.loginfo("Service request received. Please wait, until undocking is done")
 				cmd_vel = Twist()
-				error = self.undocking_pose - self.marker_pose.pose.position.x
+				error = (0.4 + undock_pose) - self.translation[0]
 			while error >= 0.01:
-				error = self.undocking_pose - self.marker_pose.pose.position.x
+				error = (0.4 + undock_pose) - self.translation[0]
 				if(self.p_gain*-error<-self.max_vel_limit):
 					cmd_vel.linear.x = -self.max_vel_limit
 				else:
